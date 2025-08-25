@@ -22,7 +22,7 @@ def start(message):
         name TEXT, 
         question TEXT,
         answer TEXT,
-        guessedRight TEXT, -- list угаданных пользователей
+        guessedRight TEXT DEFAULT '', -- list угаданных пользователей
         busyness TEXT DEFAULT 'free', -- *userID* = пользователь кем-то занят, free = пользователь свободен
         description TEXT
         )''')
@@ -186,9 +186,9 @@ def generate(message):
                 # Проверка, не отгадывает ли он нас в данный момент
                 if I[5] != usr[0]:
                     # Смотрится, не отгадывал ли он нас до этого
-                    if (usr[4] is None) or (I[0] in usr[4].split(', ')):
+                    if (usr[4] is None) or (I[0] in usr[4].split()):
                         # Смотрится, не отгадывали ли мы его до этого
-                        if (I[4] is None) or (usr[0] in I[4].split(', ')):
+                        if (I[4] is None) or (usr[0] in I[4].split()):
                             # Обновить busyness пользователя на наш ID
                             db = sqlite3.connect('Data.db')
                             cur = db.cursor()
@@ -218,7 +218,7 @@ def isTrue(message, usr):
 
         # Записать в БД значение угаданного ID
         cur.execute(
-            "UPDATE users SET guessedRight = guessedRight || ? WHERE userID = ?",
+            "UPDATE users SET guessedRight = guessedRight || ' ' || ? WHERE userID = ?",
             (usr[0], message.from_user.id)
         )
         # Обнулить busyness пользователя, за которым мы охотились
