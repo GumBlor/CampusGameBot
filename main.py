@@ -235,6 +235,9 @@ def isTrue(message, usr):
         bot.send_message(message.chat.id, 'Ответ не верный!')
         info(message, usr)
 
-
+# Показывает рейтиг
+@bot.message_handler(commands=["rating"])
+def rating(message):
+    ''' Считает баллы всех в списке, показывает топ 5 людей (их имена и баллы) '''
 
 bot.polling(non_stop=True)
