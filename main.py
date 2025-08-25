@@ -22,8 +22,8 @@ def start(message):
         name TEXT, 
         question TEXT,
         answer TEXT,
-        guessedRight TEXT, 
-        busyness INTEGER DEFAULT 0, -- 1 = True, 0 = False
+        guessedRight TEXT, -- list угаданных пользователей
+        busyness TEXT DEFAULT 'free', -- *userID* = пользователь кем-то занят, free = пользователь свободен
         description TEXT
         )''')
     db.commit()
@@ -104,25 +104,11 @@ def description(message):
     cur.close()
     db.close()
 
-
-    # Вывод всех зареганных юзеров
-    db = sqlite3.connect('Data.db')
-    cur = db.cursor()
-
-    cur.execute("SELECT * FROM users")
-    usrs = cur.fetchall()
-    print(usrs)
-
-    cur.close()
-    db.close()
-
-
     # Вывести поздравление об успешной регистрации
     bot.send_message(message.chat.id, f'Приятно познакомиться!')
 
     # Если у пользователя нет ответа на вопрос в БД, то написать вопрос и считать ответ,
     # чтобы не менять вопрос при перерегистрации
-    ''' Выводится при повторной регистрации - проблема '''
     if userAnswer is None:
         # Написать вопрос из БД пользователю
         writeQuestion(message)
@@ -156,30 +142,99 @@ def yourAnswer(message):
     # Просто так
     bot.send_message(message.chat.id, 'Просто прекрасно!')
 
-"""
 
 @bot.message_handler(commands=["generate"])
 def generate(message):
     '''
-    Команда, которая генерирует вам человека, выдает его фото и вопрос(ы). Новый человек генерируется после сверки
-    со всеми угаданными ID, чтобы избежать повторения в генерации человека. При генерации также проводится проверка на
-    факт того, что мы не выпали человеку, который выпал нам - чтобы была замкнутая цепь.
+    1. Получить список всех юзеров.
+    2. Проверка: если у кого-то в busyness есть наш ID, то написать пользователю, что он уже кого-то ищет.
+    Если же ни у кого нет нашего ID, то выполнять код.
+    3. Пройтись по нему, смотря параметр busyness. Если он = 0, то смотрится,
+    не совпадает ли наше значение busyness с его ID (иными словами, не отгадывает ли он нас в данный момент).
+    4. Если пользователь не отгадывает нас, то смотрится, не отгадывал ли он нас до этого
+    5. Если пользователь не отгадывал нас до этого, то смотрится, не отгадывали ли мы его до этого
+    6. Если не отгадывали, то обновить busyness пользователя на наш ID. Вывести вопрос данного человека
     '''
 
-    # Нельзя генерировать нового, пока не нашел старого.
+    # Вывод всех зарегистрированных юзеров
+    db = sqlite3.connect('Data.db')
+    cur = db.cursor()
 
-    # Если busyness == True, то идти дальше по списку, иначе - выбрать
+    cur.execute("SELECT * FROM users")
+    usrs = cur.fetchall()
 
-    question(message)
+    # Получить информацию о себе
+    I = usrs[0]
+    IamBusy = False
+    for usr in usrs:
+        if usr[0] == message.from_user.id:
+            I = usr
+        if usr[5] == I[0]:
+            IamBusy = True
+
+    cur.close()
+    db.close()
+
+    # Если у некоторого пользователя в busyness есть наш ID, то написать нам, что мы уже кого-то ищем.
+    # Если же ни у кого нет нашего ID, то выполнять код.
+    if IamBusy:
+        bot.send_message(message.chat.id, 'Да вам бы старого отгадать!')
+    else:
+        for usr in usrs:
+            # Пользователь свободен, а также это не я
+            if (usr[5] == 'free') and (usr[0] != I[0]):
+                # Проверка, не отгадывает ли он нас в данный момент
+                if I[5] != usr[0]:
+                    # Смотрится, не отгадывал ли он нас до этого
+                    if (usr[4] is None) or (I[0] in usr[4].split(', ')):
+                        # Смотрится, не отгадывали ли мы его до этого
+                        if (I[4] is None) or (usr[0] in I[4].split(', ')):
+                            # Обновить busyness пользователя на наш ID
+                            db = sqlite3.connect('Data.db')
+                            cur = db.cursor()
+                            cur.execute(
+                                "UPDATE users SET busyness = ? WHERE userID = ?",
+                                (I[0], usr[0])
+                            )
+                            db.commit()
+                            cur.close()
+                            db.close()
+                            # Вывести вопрос данного человека
+                            info(message, usr)
 
 
-def question(message):
-    ''' Показывает вопрос человека '''
-    bot.register_next_step_handler(message, isTrue)
+def info(message, usr):
+    # Вывести описание (фото)
+    bot.send_message(message.chat.id, usr[6])
+    # Вывести вопрос
+    bot.send_message(message.chat.id, usr[2])
 
-def isTrue(message):
-    ''' Если ответ верный, то выводит поздравление и записывает балл в БД, а если нет, то кидает обратно на question() '''
-    
-"""
+    bot.register_next_step_handler(message, isTrue, usr)
+
+def isTrue(message, usr):
+    if message.text == usr[3]:
+        db = sqlite3.connect('Data.db')
+        cur = db.cursor()
+
+        # Записать в БД значение угаданного ID
+        cur.execute(
+            "UPDATE users SET guessedRight = guessedRight || ? WHERE userID = ?",
+            (usr[0], message.from_user.id)
+        )
+        # Обнулить busyness пользователя, за которым мы охотились
+        cur.execute(
+            "UPDATE users SET busyness = 'free' WHERE userID = ?",
+            (usr[0],)
+        )
+        db.commit()
+        cur.close()
+        db.close()
+
+        bot.send_message(message.chat.id, 'Ответ верный!')
+    else:
+        bot.send_message(message.chat.id, 'Ответ не верный!')
+        info(message, usr)
+
+
 
 bot.polling(non_stop=True)
