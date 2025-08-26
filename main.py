@@ -164,13 +164,14 @@ def generate(message):
     usrs = cur.fetchall()
 
     # Получить информацию о себе
+
     I = usrs[0]
     IamBusy = False
     for usr in usrs:
         if usr[0] == message.from_user.id:
             I = usr
-        if usr[5] == I[0]:
-            IamBusy = True
+            if (usr[5] == I[0]) and (usr[4] != ''):
+                IamBusy = True
 
     cur.close()
     db.close()
@@ -179,6 +180,7 @@ def generate(message):
     # Если же ни у кого нет нашего ID, то выполнять код.
     if IamBusy:
         bot.send_message(message.chat.id, 'Да вам бы старого отгадать!')
+        #info(message, usr)
     else:
         for usr in usrs:
             # Пользователь свободен, а также это не я
@@ -186,9 +188,9 @@ def generate(message):
                 # Проверка, не отгадывает ли он нас в данный момент
                 if I[5] != usr[0]:
                     # Смотрится, не отгадывал ли он нас до этого
-                    if (usr[4] is None) or (I[0] in usr[4].split()):
+                    if (usr[4] == '') or (I[0] in usr[4].split()):
                         # Смотрится, не отгадывали ли мы его до этого
-                        if (I[4] is None) or (usr[0] in I[4].split()):
+                        if (I[4] == '') or (usr[0] in I[4].split()):
                             # Обновить busyness пользователя на наш ID
                             db = sqlite3.connect('Data.db')
                             cur = db.cursor()
